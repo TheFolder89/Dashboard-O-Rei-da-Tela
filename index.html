@@ -109,8 +109,10 @@
           let headers = [];
           let delimiter = ',';
 
+          // 1. Encontrar a linha de cabeçalho
           for (let i = 0; i < Math.min(lines.length, 20); i++) {
             const line = lines[i].toUpperCase();
+            // Procura por colunas chave: CLIENTE e (VALOR ou TOTAL ou SITUACAO)
             if (line.includes('CLIENTE') && (line.includes('VALOR') || line.includes('TOTAL') || line.includes('SITU'))) {
               headerIndex = i;
               const commaCount = (lines[i].match(/,/g) || []).length;
@@ -122,7 +124,7 @@
           }
 
           if (headerIndex === -1) {
-            return { data: [], error: "Cabeçalho não encontrado (procuramos por 'Cliente' e 'Valor')." };
+            return { data: [], error: "Cabeçalho não encontrado. Certifique-se que as colunas 'Cliente', 'Valor total', 'Situação' estão presentes." };
           }
 
           const colMap = {
@@ -140,6 +142,11 @@
             else if (header.includes('EQUIPAMENTO') || header.includes('APARELHO')) colMap.equipamento = idx;
             else if (header.includes('COMO CONHECEU') || header.includes('ORIGEM')) colMap.origem = idx;
           });
+
+          // Validação mínima de colunas cruciais
+          if (colMap.cliente === -1 || colMap.valorTotal === -1 || colMap.data === -1) {
+             return { data: [], error: "Não foi possível identificar colunas cruciais ('Cliente', 'Valor total', 'Data'). Verifique o formato do cabeçalho." };
+          }
 
           for (let i = headerIndex + 1; i < lines.length; i++) {
             const line = lines[i].trim();
@@ -247,26 +254,29 @@
             reader.onload = (e) => {
               try {
                 const text = e.target.result;
-                const debugSnippet = text.substring(0, 1000);
+                const debugSnippet = text.substring(0, 1000); // Primeiros 1000 caracteres para debug
+                
                 const result = parseCSV(text);
                 
                 if (result.error || result.data.length === 0) {
                     setErrorDetails({
-                        msg: result.error || "Nenhum dado encontrado após o cabeçalho.",
+                        msg: result.error || "Nenhum dado encontrado após o cabeçalho. Total de linhas lidas: " + result.data.length,
                         snippet: debugSnippet
                     });
                     setIsProcessing(false);
                     return;
                 }
-
+                
+                // console.log("Dados lidos com sucesso:", result.data.length, "registros.");
                 setRawData(result.data);
               } catch (error) {
                 console.error("Erro fatal:", error);
-                setErrorDetails({ msg: "Erro inesperado: " + error.message, snippet: "N/A" });
+                setErrorDetails({ msg: "Erro inesperado ao processar o arquivo: " + error.message, snippet: "N/A" });
               } finally {
                 setIsProcessing(false);
               }
             };
+            // Tenta ler como UTF-8 (padrão web)
             reader.readAsText(file); 
           };
 
@@ -441,9 +451,28 @@
                             <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
                             <div>
                                 <h4 className="font-semibold text-red-800">Erro de Leitura</h4>
-                                <p className="text-sm text-red-700 mt-1">{errorDetails.msg}</p>
+                                <p className="text-sm text-red-700 mt-1 mb-2">{errorDetails.msg}</p>
+                                
+                                <button 
+                                    onClick={() => setShowDebug(!showDebug)}
+                                    className="text-xs font-semibold text-red-600 underline hover:text-red-800"
+                                >
+                                    {showDebug ? 'Ocultar detalhes técnicos' : 'Ver detalhes técnicos (Debug)'}
+                                </button>
                             </div>
                         </div>
+                        
+                        {showDebug && errorDetails.snippet && (
+                            <div className="mt-3">
+                                <p className="text-xs text-slate-500 mb-1">Início do conteúdo do arquivo (Raw):</p>
+                                <pre className="bg-slate-800 text-green-400 p-3 rounded text-xs overflow-auto max-h-40 whitespace-pre-wrap font-mono">
+                                    {errorDetails.snippet}
+                                </pre>
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Se o texto acima tiver símbolos estranhos, o arquivo pode estar em codificação errada.
+                                </p>
+                            </div>
+                        )}
                     </div>
                   )}
                   
